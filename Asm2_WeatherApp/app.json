@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ASS2",
-    "slug": "ASS2",
+    "name": "Asm2_WeatherApp",
+    "slug": "Asm2_WeatherApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "ass2",
+    "scheme": "asm2weatherapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

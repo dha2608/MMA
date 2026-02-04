@@ -17,14 +17,6 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        <Stack.Screen 
-          name="weather-detail" 
-          options={{ 
-            presentation: 'card',
-            title: 'Chi tiết thời tiết',
-            headerShown: true,
-          }} 
-        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

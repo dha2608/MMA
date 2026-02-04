@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import { getWeatherForecast, groupForecastByDay, getWeatherIconUrl } from '@/services/weather-api';
+import {
+  getWeatherForecastByCoordinates,
+  groupForecastByDay,
+  getWeatherIconUrl,
+} from '@/services/weather-api';
 import type { WeatherData, DailyForecast } from '@/services/weather-api';
-
-const { width } = Dimensions.get('window');
 
 export default function DetailScreen() {
   const params = useLocalSearchParams();
@@ -16,6 +17,7 @@ export default function DetailScreen() {
   const [dailyForecasts, setDailyForecasts] = useState<DailyForecast[]>([]);
   const [loadingForecast, setLoadingForecast] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
   
   let weatherData: WeatherData | null = null;
   
@@ -42,8 +44,11 @@ export default function DetailScreen() {
     setLoadingForecast(true);
     setForecastError(null);
     try {
-      // Sử dụng tọa độ để đảm bảo chính xác hơn
-      const forecastData = await getWeatherForecast(weatherData.name + ', VN');
+      // Dùng tọa độ để khớp đúng địa điểm, tránh sai do trùng tên
+      const forecastData = await getWeatherForecastByCoordinates(
+        weatherData.coord.lat,
+        weatherData.coord.lon
+      );
       const daily = groupForecastByDay(forecastData);
       setDailyForecasts(daily);
     } catch (error: any) {
@@ -84,9 +89,10 @@ export default function DetailScreen() {
     return directions[Math.round(deg / 45) % 8];
   };
 
-  const getWeatherIconUrl = (iconCode: string) => {
-    return `https://openweathermap.org/img/wn/${iconCode}@2x.png`;
-  };
+  const today = useMemo(() => {
+    const now = new Date();
+    return now.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' });
+  }, []);
 
   const getGradientColors = () => {
     const hour = new Date().getHours();
@@ -124,6 +130,7 @@ export default function DetailScreen() {
             <ThemedText style={styles.country}>
               {weatherData.sys.country}
             </ThemedText>
+            <ThemedText style={styles.headerDate}>{today}</ThemedText>
           </View>
 
           {/* Main Weather Info */}
@@ -132,259 +139,158 @@ export default function DetailScreen() {
               colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
               style={styles.cardGradient}
             >
-              <View style={styles.temperatureSection}>
-                <ThemedText type="title" style={styles.temperature}>
-                  {Math.round(weatherData.main.temp)}°
-                </ThemedText>
-                <ThemedText style={styles.feelsLike}>
-                  Cảm giác như {Math.round(weatherData.main.feels_like)}°
-                </ThemedText>
-              </View>
-              <View style={styles.weatherInfoSection}>
+              <View style={styles.mainRow}>
+                <View style={styles.mainLeft}>
+                  <ThemedText type="title" style={styles.temperature}>
+                    {Math.round(weatherData.main.temp)}°
+                  </ThemedText>
+                  <ThemedText style={styles.weatherDescription}>
+                    {weatherData.weather[0].description}
+                  </ThemedText>
+                  <ThemedText style={styles.feelsLike}>
+                    Cảm giác như {Math.round(weatherData.main.feels_like)}°
+                  </ThemedText>
+                </View>
                 <Image
-                  source={{
-                    uri: getWeatherIconUrl(weatherData.weather[0].icon),
-                  }}
+                  source={{ uri: getWeatherIconUrl(weatherData.weather[0].icon) }}
                   style={styles.weatherIcon}
                   contentFit="contain"
                   transition={200}
                 />
-                <ThemedText style={styles.weatherDescription}>
-                  {weatherData.weather[0].description}
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Forecast carousel (giảm scroll dọc) */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
+              style={styles.cardGradientCompact}
+            >
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText type="subtitle" style={styles.cardTitleCompact}>
+                  📅 Dự báo 7 ngày
                 </ThemedText>
+                {loadingForecast ? (
+                  <ActivityIndicator size="small" color="#2196F3" />
+                ) : null}
               </View>
-            </LinearGradient>
-          </View>
 
-          {/* Temperature Range */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                🌡️ Nhiệt độ
-              </ThemedText>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Tối thiểu</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {Math.round(weatherData.main.temp_min)}°
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Tối đa</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {Math.round(weatherData.main.temp_max)}°
-                  </ThemedText>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Weather Conditions */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                🌤️ Điều kiện thời tiết
-              </ThemedText>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Độ ẩm</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.main.humidity}%
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Áp suất</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.main.pressure} hPa
-                  </ThemedText>
-                </View>
-              </View>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Tầm nhìn</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {(weatherData.visibility / 1000).toFixed(1)} km
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Mây</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.clouds.all}%
-                  </ThemedText>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Wind Info */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                💨 Gió
-              </ThemedText>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Tốc độ</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.wind.speed} m/s
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Hướng</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {getWindDirection(weatherData.wind.deg)}
-                  </ThemedText>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Sun Info */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                ☀️ Mặt trời
-              </ThemedText>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Mọc</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {formatTime(weatherData.sys.sunrise)}
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Lặn</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {formatTime(weatherData.sys.sunset)}
-                  </ThemedText>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Coordinates */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                📍 Tọa độ
-              </ThemedText>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Vĩ độ</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.coord.lat.toFixed(4)}
-                  </ThemedText>
-                </View>
-                <View style={styles.detailItem}>
-                  <ThemedText style={styles.detailLabel}>Kinh độ</ThemedText>
-                  <ThemedText style={styles.detailValue}>
-                    {weatherData.coord.lon.toFixed(4)}
-                  </ThemedText>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* 5-7 Day Forecast */}
-          <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
-              <ThemedText type="subtitle" style={styles.cardTitle}>
-                📅 Dự báo 7 ngày
-              </ThemedText>
-              
-              {loadingForecast ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#2196F3" />
-                  <ThemedText style={styles.loadingText}>
-                    Đang tải dự báo...
-                  </ThemedText>
-                </View>
-              ) : forecastError ? (
+              {forecastError ? (
                 <View style={styles.errorForecastContainer}>
-                  <ThemedText style={styles.errorForecastText}>
-                    {forecastError}
-                  </ThemedText>
+                  <ThemedText style={styles.errorForecastText}>{forecastError}</ThemedText>
                 </View>
               ) : dailyForecasts.length > 0 ? (
-                <View style={styles.forecastContainer}>
-                  {dailyForecasts.map((forecast, index) => (
-                    <View
-                      key={forecast.dateTimestamp}
-                      style={[
-                        styles.forecastItem,
-                        index === 0 && styles.forecastItemToday,
-                        index < dailyForecasts.length - 1 && styles.forecastItemBorder,
-                      ]}
-                    >
-                      <View style={styles.forecastDayInfo}>
-                        <ThemedText style={styles.forecastDayName}>
-                          {forecast.dayName}
-                        </ThemedText>
-                        <ThemedText style={styles.forecastDate}>
-                          {new Date(forecast.date).toLocaleDateString('vi-VN', {
-                            day: 'numeric',
-                            month: 'short',
-                          })}
-                        </ThemedText>
-                      </View>
-                      
-                      <View style={styles.forecastWeather}>
-                        <Image
-                          source={{
-                            uri: getWeatherIconUrl(forecast.weather.icon),
-                          }}
-                          style={styles.forecastIcon}
-                          contentFit="contain"
-                          transition={200}
-                        />
-                        <ThemedText style={styles.forecastDescription}>
-                          {forecast.weather.description}
-                        </ThemedText>
-                      </View>
-                      
-                      <View style={styles.forecastTemps}>
-                        <ThemedText style={styles.forecastTempMax}>
-                          {forecast.temp_max}°
-                        </ThemedText>
-                        <ThemedText style={styles.forecastTempMin}>
-                          {forecast.temp_min}°
-                        </ThemedText>
-                      </View>
-                      
-                      <View style={styles.forecastDetails}>
-                        <View style={styles.forecastDetailItem}>
-                          <ThemedText style={styles.forecastDetailIcon}>💧</ThemedText>
-                          <ThemedText style={styles.forecastDetailText}>
-                            {forecast.humidity}%
-                          </ThemedText>
-                        </View>
-                        <View style={styles.forecastDetailItem}>
-                          <ThemedText style={styles.forecastDetailIcon}>💨</ThemedText>
-                          <ThemedText style={styles.forecastDetailText}>
-                            {forecast.windSpeed} m/s
-                          </ThemedText>
-                        </View>
-                      </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.forecastHScroll}
+                >
+                  {dailyForecasts.map((f, idx) => (
+                    <View key={f.dateTimestamp} style={[styles.forecastCard, idx === 0 && styles.forecastCardToday]}>
+                      <ThemedText style={styles.forecastCardDay}>{f.dayName}</ThemedText>
+                      <Image
+                        source={{ uri: getWeatherIconUrl(f.weather.icon) }}
+                        style={styles.forecastCardIcon}
+                        contentFit="contain"
+                        transition={150}
+                      />
+                      <ThemedText style={styles.forecastCardTemps}>
+                        {f.temp_max}° / {f.temp_min}°
+                      </ThemedText>
+                      <ThemedText numberOfLines={1} style={styles.forecastCardDesc}>
+                        {f.weather.description}
+                      </ThemedText>
                     </View>
                   ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.loadingContainerCompact}>
+                  <ThemedText style={styles.loadingText}>Chưa có dữ liệu dự báo.</ThemedText>
+                </View>
+              )}
+            </LinearGradient>
+          </View>
+
+          {/* Quick stats grid (2 cột) */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
+              style={styles.cardGradientCompact}
+            >
+              <ThemedText type="subtitle" style={styles.cardTitleCompact}>
+                Thông số hôm nay
+              </ThemedText>
+              <View style={styles.statsGrid}>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>🌡️ Cao / Thấp</ThemedText>
+                  <ThemedText style={styles.statValue}>
+                    {Math.round(weatherData.main.temp_max)}° / {Math.round(weatherData.main.temp_min)}°
+                  </ThemedText>
+                </View>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>💧 Độ ẩm</ThemedText>
+                  <ThemedText style={styles.statValue}>{weatherData.main.humidity}%</ThemedText>
+                </View>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>💨 Gió</ThemedText>
+                  <ThemedText style={styles.statValue}>
+                    {weatherData.wind.speed} m/s • {getWindDirection(weatherData.wind.deg)}
+                  </ThemedText>
+                </View>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>🧭 Áp suất</ThemedText>
+                  <ThemedText style={styles.statValue}>{weatherData.main.pressure} hPa</ThemedText>
+                </View>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>👀 Tầm nhìn</ThemedText>
+                  <ThemedText style={styles.statValue}>{(weatherData.visibility / 1000).toFixed(1)} km</ThemedText>
+                </View>
+                <View style={styles.statTile}>
+                  <ThemedText style={styles.statLabel}>☁️ Mây</ThemedText>
+                  <ThemedText style={styles.statValue}>{weatherData.clouds.all}%</ThemedText>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* More (collapse) */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
+              style={styles.cardGradientCompact}
+            >
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setShowMore((v) => !v)}
+                style={styles.moreToggleRow}
+              >
+                <ThemedText type="subtitle" style={styles.cardTitleCompact}>
+                  Thông tin nâng cao
+                </ThemedText>
+                <ThemedText style={styles.moreToggleText}>
+                  {showMore ? 'Thu gọn' : 'Xem thêm'}
+                </ThemedText>
+              </TouchableOpacity>
+
+              {showMore ? (
+                <View style={styles.statsGrid}>
+                  <View style={styles.statTile}>
+                    <ThemedText style={styles.statLabel}>☀️ Mặt trời mọc</ThemedText>
+                    <ThemedText style={styles.statValue}>{formatTime(weatherData.sys.sunrise)}</ThemedText>
+                  </View>
+                  <View style={styles.statTile}>
+                    <ThemedText style={styles.statLabel}>🌙 Mặt trời lặn</ThemedText>
+                    <ThemedText style={styles.statValue}>{formatTime(weatherData.sys.sunset)}</ThemedText>
+                  </View>
+                  <View style={styles.statTile}>
+                    <ThemedText style={styles.statLabel}>📍 Vĩ độ</ThemedText>
+                    <ThemedText style={styles.statValue}>{weatherData.coord.lat.toFixed(4)}</ThemedText>
+                  </View>
+                  <View style={styles.statTile}>
+                    <ThemedText style={styles.statLabel}>📍 Kinh độ</ThemedText>
+                    <ThemedText style={styles.statValue}>{weatherData.coord.lon.toFixed(4)}</ThemedText>
+                  </View>
                 </View>
               ) : null}
             </LinearGradient>
@@ -415,12 +321,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 60,
-    paddingBottom: 40,
+    paddingTop: 28,
+    paddingBottom: 28,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 16,
   },
   cityName: {
     fontSize: 36,
@@ -438,10 +344,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  headerDate: {
+    marginTop: 6,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
   mainCard: {
     borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -449,35 +362,39 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   cardGradient: {
-    padding: 28,
+    padding: 18,
   },
-  temperatureSection: {
+  cardGradientCompact: {
+    padding: 16,
+  },
+  mainRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+  },
+  mainLeft: {
+    flex: 1,
+    paddingRight: 12,
   },
   temperature: {
-    fontSize: 80,
+    fontSize: 72,
     fontWeight: 'bold',
     color: '#1a1a1a',
-    marginBottom: 8,
-    lineHeight: 90,
+    marginBottom: 2,
+    lineHeight: 78,
   },
   feelsLike: {
-    fontSize: 18,
+    fontSize: 14,
     opacity: 0.7,
     color: '#666',
     fontWeight: '500',
   },
-  weatherInfoSection: {
-    alignItems: 'center',
-  },
   weatherIcon: {
-    width: 140,
-    height: 140,
-    marginBottom: 12,
+    width: 110,
+    height: 110,
   },
   weatherDescription: {
-    fontSize: 22,
+    fontSize: 16,
     textTransform: 'capitalize',
     opacity: 0.8,
     color: '#666',
@@ -486,42 +403,30 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },
-  cardTitle: {
-    fontSize: 20,
-    marginBottom: 20,
-    color: '#1a1a1a',
-    fontWeight: 'bold',
-  },
-  detailRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-  },
-  detailItem: {
     alignItems: 'center',
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 14,
-    opacity: 0.7,
+    justifyContent: 'space-between',
     marginBottom: 10,
-    color: '#666',
-    fontWeight: '500',
   },
-  detailValue: {
-    fontSize: 22,
-    fontWeight: '700',
+  cardTitleCompact: {
+    fontSize: 18,
     color: '#1a1a1a',
+    fontWeight: '800',
   },
   loadingContainer: {
     padding: 30,
+    alignItems: 'center',
+  },
+  loadingContainerCompact: {
+    paddingVertical: 8,
     alignItems: 'center',
   },
   loadingText: {
@@ -541,88 +446,80 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  forecastContainer: {
-    marginTop: 8,
+  forecastHScroll: {
+    paddingRight: 4,
   },
-  forecastItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 4,
+  forecastCard: {
+    width: 122,
+    marginRight: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(33, 150, 243, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(33, 150, 243, 0.15)',
   },
-  forecastItemToday: {
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+  forecastCardToday: {
+    backgroundColor: 'rgba(33, 150, 243, 0.14)',
+    borderColor: 'rgba(33, 150, 243, 0.28)',
   },
-  forecastItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
-    marginBottom: 8,
-    paddingBottom: 16,
-  },
-  forecastDayInfo: {
-    marginBottom: 12,
-  },
-  forecastDayName: {
-    fontSize: 18,
-    fontWeight: '700',
+  forecastCardDay: {
+    fontSize: 14,
+    fontWeight: '800',
     color: '#1a1a1a',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  forecastDate: {
-    fontSize: 13,
-    color: '#888',
-    fontWeight: '500',
+  forecastCardIcon: {
+    width: 44,
+    height: 44,
+    marginBottom: 6,
   },
-  forecastWeather: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+  forecastCardTemps: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    marginBottom: 2,
   },
-  forecastIcon: {
-    width: 50,
-    height: 50,
-    marginRight: 12,
-  },
-  forecastDescription: {
-    fontSize: 15,
+  forecastCardDesc: {
+    fontSize: 12,
     color: '#666',
     textTransform: 'capitalize',
-    flex: 1,
     fontWeight: '500',
   },
-  forecastTemps: {
+  statsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+    columnGap: 12,
+    marginTop: 8,
   },
-  forecastTempMax: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginRight: 12,
+  statTile: {
+    width: '48%',
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
-  forecastTempMin: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#888',
-  },
-  forecastDetails: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: 20,
-  },
-  forecastDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  forecastDetailIcon: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  forecastDetailText: {
-    fontSize: 13,
+  statLabel: {
+    fontSize: 12,
     color: '#666',
-    fontWeight: '500',
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    fontWeight: '800',
+  },
+  moreToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  moreToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2196F3',
   },
 });

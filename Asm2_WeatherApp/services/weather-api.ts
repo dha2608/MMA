@@ -319,7 +319,8 @@ export function groupForecastByDay(forecastData: ForecastData): DailyForecast[] 
     const avgWindSpeed = items.reduce((sum, item) => sum + item.wind.speed, 0) / items.length;
     const avgWindDeg = items.reduce((sum, item) => sum + item.wind.deg, 0) / items.length;
 
-    const date = new Date(dateKey);
+    // Parse local date to avoid timezone shifting (YYYY-MM-DD treated as UTC in some JS engines)
+    const date = new Date(`${dateKey}T00:00:00`);
     const dayName = dayNames[date.getDay()];
     const isToday = dateKey === new Date().toISOString().split('T')[0];
     const displayName = isToday ? 'Hôm nay' : dayName;

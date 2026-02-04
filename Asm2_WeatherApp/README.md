@@ -1,16 +1,34 @@
-# Welcome to your Expo app 👋
+# Weather App - Asm2_SE171793_WeatherApp
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Ứng dụng thời tiết đơn giản được xây dựng với React Native và Expo.
 
-## Get started
+## Tính năng
 
-1. Install dependencies
+- 🔍 Tìm kiếm thời tiết theo tên thành phố
+- 🎯 Gợi ý thông minh cho các tỉnh thành Việt Nam
+- 📱 Hỗ trợ tìm kiếm không dấu, không khoảng trắng
+- 📊 Hiển thị thông tin thời tiết chi tiết
+- 🌐 Xử lý lỗi khi không có kết nối Internet
+
+## Cài đặt
+
+1. Cài đặt dependencies
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. Cấu hình API Key
+
+   - Tạo file `.env` trong thư mục gốc của project
+   - Thêm API key từ OpenWeatherMap:
+     ```
+     EXPO_PUBLIC_WEATHER_API_URL=https://api.openweathermap.org/data/2.5
+     EXPO_PUBLIC_WEATHER_API_KEY=your_api_key_here
+     ```
+   - Lấy API key miễn phí tại: https://openweathermap.org/api
+
+3. Khởi chạy ứng dụng
 
    ```bash
    npx expo start

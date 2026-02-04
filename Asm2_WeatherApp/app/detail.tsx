@@ -1,17 +1,21 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import type { WeatherData } from '@/services/weather-api';
+import { getWeatherForecast, groupForecastByDay, getWeatherIconUrl } from '@/services/weather-api';
+import type { WeatherData, DailyForecast } from '@/services/weather-api';
 
 const { width } = Dimensions.get('window');
 
 export default function DetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const [dailyForecasts, setDailyForecasts] = useState<DailyForecast[]>([]);
+  const [loadingForecast, setLoadingForecast] = useState(false);
+  const [forecastError, setForecastError] = useState<string | null>(null);
   
   let weatherData: WeatherData | null = null;
   
@@ -23,6 +27,32 @@ export default function DetailScreen() {
     console.error('Error parsing weather data:', error);
     weatherData = null;
   }
+
+  // Fetch forecast khi component mount
+  useEffect(() => {
+    if (weatherData?.name) {
+      fetchForecast();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weatherData?.name]);
+
+  const fetchForecast = async () => {
+    if (!weatherData) return;
+    
+    setLoadingForecast(true);
+    setForecastError(null);
+    try {
+      // Sử dụng tọa độ để đảm bảo chính xác hơn
+      const forecastData = await getWeatherForecast(weatherData.name + ', VN');
+      const daily = groupForecastByDay(forecastData);
+      setDailyForecasts(daily);
+    } catch (error: any) {
+      setForecastError(error.message || 'Không thể tải dự báo thời tiết');
+      console.error('Forecast error:', error);
+    } finally {
+      setLoadingForecast(false);
+    }
+  };
 
   if (!weatherData) {
     return (
@@ -269,6 +299,96 @@ export default function DetailScreen() {
               </View>
             </LinearGradient>
           </View>
+
+          {/* 5-7 Day Forecast */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
+              style={styles.cardGradient}
+            >
+              <ThemedText type="subtitle" style={styles.cardTitle}>
+                📅 Dự báo 7 ngày
+              </ThemedText>
+              
+              {loadingForecast ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#2196F3" />
+                  <ThemedText style={styles.loadingText}>
+                    Đang tải dự báo...
+                  </ThemedText>
+                </View>
+              ) : forecastError ? (
+                <View style={styles.errorForecastContainer}>
+                  <ThemedText style={styles.errorForecastText}>
+                    {forecastError}
+                  </ThemedText>
+                </View>
+              ) : dailyForecasts.length > 0 ? (
+                <View style={styles.forecastContainer}>
+                  {dailyForecasts.map((forecast, index) => (
+                    <View
+                      key={forecast.dateTimestamp}
+                      style={[
+                        styles.forecastItem,
+                        index === 0 && styles.forecastItemToday,
+                        index < dailyForecasts.length - 1 && styles.forecastItemBorder,
+                      ]}
+                    >
+                      <View style={styles.forecastDayInfo}>
+                        <ThemedText style={styles.forecastDayName}>
+                          {forecast.dayName}
+                        </ThemedText>
+                        <ThemedText style={styles.forecastDate}>
+                          {new Date(forecast.date).toLocaleDateString('vi-VN', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.forecastWeather}>
+                        <Image
+                          source={{
+                            uri: getWeatherIconUrl(forecast.weather.icon),
+                          }}
+                          style={styles.forecastIcon}
+                          contentFit="contain"
+                          transition={200}
+                        />
+                        <ThemedText style={styles.forecastDescription}>
+                          {forecast.weather.description}
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.forecastTemps}>
+                        <ThemedText style={styles.forecastTempMax}>
+                          {forecast.temp_max}°
+                        </ThemedText>
+                        <ThemedText style={styles.forecastTempMin}>
+                          {forecast.temp_min}°
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.forecastDetails}>
+                        <View style={styles.forecastDetailItem}>
+                          <ThemedText style={styles.forecastDetailIcon}>💧</ThemedText>
+                          <ThemedText style={styles.forecastDetailText}>
+                            {forecast.humidity}%
+                          </ThemedText>
+                        </View>
+                        <View style={styles.forecastDetailItem}>
+                          <ThemedText style={styles.forecastDetailIcon}>💨</ThemedText>
+                          <ThemedText style={styles.forecastDetailText}>
+                            {forecast.windSpeed} m/s
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </LinearGradient>
+          </View>
         </ScrollView>
       </LinearGradient>
     </View>
@@ -399,5 +519,110 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#1a1a1a',
+  },
+  loadingContainer: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  errorForecastContainer: {
+    padding: 20,
+    backgroundColor: '#ffebee',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f44336',
+  },
+  errorForecastText: {
+    color: '#c62828',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  forecastContainer: {
+    marginTop: 8,
+  },
+  forecastItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+  },
+  forecastItemToday: {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  forecastItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    marginBottom: 8,
+    paddingBottom: 16,
+  },
+  forecastDayInfo: {
+    marginBottom: 12,
+  },
+  forecastDayName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  forecastDate: {
+    fontSize: 13,
+    color: '#888',
+    fontWeight: '500',
+  },
+  forecastWeather: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  forecastIcon: {
+    width: 50,
+    height: 50,
+    marginRight: 12,
+  },
+  forecastDescription: {
+    fontSize: 15,
+    color: '#666',
+    textTransform: 'capitalize',
+    flex: 1,
+    fontWeight: '500',
+  },
+  forecastTemps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  forecastTempMax: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginRight: 12,
+  },
+  forecastTempMin: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#888',
+  },
+  forecastDetails: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 20,
+  },
+  forecastDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  forecastDetailIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  forecastDetailText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
   },
 });

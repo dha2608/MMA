@@ -1,23 +1,37 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
+import { GlassCard } from '@/components/glass-card';
 import { ThemedText } from '@/components/themed-text';
+import type { DailyForecast, WeatherData } from '@/services/weather-api';
 import {
-  getWeatherForecastByCoordinates,
-  groupForecastByDay,
-  getWeatherIconUrl,
+    getWeatherForecastByCoordinates,
+    getWeatherIconUrl,
+    groupForecastByDay,
 } from '@/services/weather-api';
-import type { WeatherData, DailyForecast } from '@/services/weather-api';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function DetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [dailyForecasts, setDailyForecasts] = useState<DailyForecast[]>([]);
   const [loadingForecast, setLoadingForecast] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [showMore, setShowMore] = useState(false);
+  const [mainReady, setMainReady] = useState(false);
+  const mainAnim = useMemo(() => new Animated.Value(0), []);
   
   let weatherData: WeatherData | null = null;
   
@@ -34,9 +48,21 @@ export default function DetailScreen() {
   useEffect(() => {
     if (weatherData?.name) {
       fetchForecast();
+      setMainReady(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weatherData?.name]);
+
+  useEffect(() => {
+    if (mainReady) {
+      mainAnim.setValue(0);
+      Animated.timing(mainAnim, {
+        toValue: 1,
+        duration: 280,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [mainReady, mainAnim]);
 
   const fetchForecast = async () => {
     if (!weatherData) return;
@@ -94,19 +120,30 @@ export default function DetailScreen() {
     return now.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' });
   }, []);
 
+  const forecastLayout = useMemo(() => {
+    // Aim to show 2–3 cards on screen depending on width
+    const visibleCards = screenWidth >= 420 ? 3 : 2;
+    const containerPadding = 16; // cardGradientCompact padding
+    const gap = 10; // spacing between cards
+    const available = screenWidth - containerPadding * 2;
+    const cardWidth = Math.floor((available - gap * (visibleCards - 1)) / visibleCards);
+    const snapToInterval = cardWidth + gap;
+    return { cardWidth, gap, snapToInterval };
+  }, [screenWidth]);
+
   const getGradientColors = () => {
     const hour = new Date().getHours();
     const isDay = hour >= 6 && hour < 20;
     const weatherMain = weatherData.weather[0].main.toLowerCase();
     
     if (weatherMain.includes('rain') || weatherMain.includes('drizzle')) {
-      return isDay ? ['#6B7A8F', '#4A5F7F'] : ['#2C3E50', '#1A252F'];
+      return isDay ? ['#0B1226', '#0E1A3A', '#0A1224'] : ['#070B16', '#0A1020', '#050814'];
     } else if (weatherMain.includes('cloud')) {
-      return isDay ? ['#87CEEB', '#6BB6FF'] : ['#4A5568', '#2D3748'];
+      return isDay ? ['#0A1430', '#0F214A', '#07112A'] : ['#070B18', '#0B1226', '#050814'];
     } else if (weatherMain.includes('clear')) {
-      return isDay ? ['#4A90E2', '#357ABD'] : ['#1A1A2E', '#16213E'];
+      return isDay ? ['#07152E', '#0B2B5A', '#050E1E'] : ['#040510', '#0A1030', '#02030A'];
     } else {
-      return isDay ? ['#FFB347', '#FF8C00'] : ['#2C1810', '#1A0F08'];
+      return isDay ? ['#0B1020', '#1B243F', '#07111F'] : ['#05060F', '#0A0E1F', '#03040A'];
     }
   };
 
@@ -119,7 +156,10 @@ export default function DetailScreen() {
         style={styles.gradient}
       >
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: Math.max(insets.top + 10, 20), paddingBottom: insets.bottom + 22 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
@@ -134,11 +174,21 @@ export default function DetailScreen() {
           </View>
 
           {/* Main Weather Info */}
-          <View style={styles.mainCard}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradient}
-            >
+          <Animated.View
+            style={{
+              transform: [
+                {
+                  translateY: mainAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 0],
+                  }),
+                },
+              ],
+              opacity: mainAnim,
+            }}
+          >
+            <View style={styles.mainCard}>
+              <GlassCard intensity={28} tint="dark" style={styles.cardGradient}>
               <View style={styles.mainRow}>
                 <View style={styles.mainLeft}>
                   <ThemedText type="title" style={styles.temperature}>
@@ -158,15 +208,13 @@ export default function DetailScreen() {
                   transition={200}
                 />
               </View>
-            </LinearGradient>
-          </View>
+              </GlassCard>
+            </View>
+          </Animated.View>
 
           {/* Forecast carousel (giảm scroll dọc) */}
           <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradientCompact}
-            >
+            <GlassCard intensity={26} tint="dark" style={styles.cardGradientCompact}>
               <View style={styles.sectionHeaderRow}>
                 <ThemedText type="subtitle" style={styles.cardTitleCompact}>
                   📅 Dự báo 7 ngày
@@ -185,9 +233,20 @@ export default function DetailScreen() {
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.forecastHScroll}
+                  decelerationRate="fast"
+                  snapToInterval={forecastLayout.snapToInterval}
+                  snapToAlignment="start"
                 >
                   {dailyForecasts.map((f, idx) => (
-                    <View key={f.dateTimestamp} style={[styles.forecastCard, idx === 0 && styles.forecastCardToday]}>
+                    <View
+                      key={f.dateTimestamp}
+                      style={[
+                        styles.forecastCard,
+                        { width: forecastLayout.cardWidth, marginRight: forecastLayout.gap },
+                        idx === 0 && styles.forecastCardToday,
+                        idx === dailyForecasts.length - 1 && styles.forecastCardLast,
+                      ]}
+                    >
                       <ThemedText style={styles.forecastCardDay}>{f.dayName}</ThemedText>
                       <Image
                         source={{ uri: getWeatherIconUrl(f.weather.icon) }}
@@ -209,15 +268,12 @@ export default function DetailScreen() {
                   <ThemedText style={styles.loadingText}>Chưa có dữ liệu dự báo.</ThemedText>
                 </View>
               )}
-            </LinearGradient>
+            </GlassCard>
           </View>
 
           {/* Quick stats grid (2 cột) */}
           <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradientCompact}
-            >
+            <GlassCard intensity={26} tint="dark" style={styles.cardGradientCompact}>
               <ThemedText type="subtitle" style={styles.cardTitleCompact}>
                 Thông số hôm nay
               </ThemedText>
@@ -251,15 +307,12 @@ export default function DetailScreen() {
                   <ThemedText style={styles.statValue}>{weatherData.clouds.all}%</ThemedText>
                 </View>
               </View>
-            </LinearGradient>
+            </GlassCard>
           </View>
 
           {/* More (collapse) */}
           <View style={styles.card}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-              style={styles.cardGradientCompact}
-            >
+            <GlassCard intensity={26} tint="dark" style={styles.cardGradientCompact}>
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => setShowMore((v) => !v)}
@@ -293,7 +346,7 @@ export default function DetailScreen() {
                   </View>
                 </View>
               ) : null}
-            </LinearGradient>
+            </GlassCard>
           </View>
         </ScrollView>
       </LinearGradient>
@@ -307,8 +360,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   errorContainer: {
     padding: 20,
@@ -321,8 +373,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 28,
-    paddingBottom: 28,
   },
   header: {
     alignItems: 'center',
@@ -379,14 +429,14 @@ const styles = StyleSheet.create({
   temperature: {
     fontSize: 72,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: '#fff',
     marginBottom: 2,
     lineHeight: 78,
   },
   feelsLike: {
     fontSize: 14,
     opacity: 0.7,
-    color: '#666',
+    color: 'rgba(255,255,255,0.78)',
     fontWeight: '500',
   },
   weatherIcon: {
@@ -397,7 +447,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textTransform: 'capitalize',
     opacity: 0.8,
-    color: '#666',
+    color: 'rgba(255,255,255,0.90)',
     fontWeight: '600',
   },
   card: {
@@ -418,7 +468,7 @@ const styles = StyleSheet.create({
   },
   cardTitleCompact: {
     fontSize: 18,
-    color: '#1a1a1a',
+    color: '#fff',
     fontWeight: '800',
   },
   loadingContainer: {
@@ -432,7 +482,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255,255,255,0.78)',
   },
   errorForecastContainer: {
     padding: 20,
@@ -450,13 +500,14 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   forecastCard: {
-    width: 122,
-    marginRight: 10,
     padding: 12,
     borderRadius: 16,
     backgroundColor: 'rgba(33, 150, 243, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(33, 150, 243, 0.15)',
+  },
+  forecastCardLast: {
+    marginRight: 0,
   },
   forecastCardToday: {
     backgroundColor: 'rgba(33, 150, 243, 0.14)',
@@ -465,7 +516,7 @@ const styles = StyleSheet.create({
   forecastCardDay: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1a1a1a',
+    color: '#fff',
     marginBottom: 6,
   },
   forecastCardIcon: {
@@ -476,12 +527,12 @@ const styles = StyleSheet.create({
   forecastCardTemps: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1a1a1a',
+    color: '#fff',
     marginBottom: 2,
   },
   forecastCardDesc: {
     fontSize: 12,
-    color: '#666',
+    color: 'rgba(255,255,255,0.78)',
     textTransform: 'capitalize',
     fontWeight: '500',
   },
@@ -497,19 +548,19 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 12,
     borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   statLabel: {
     fontSize: 12,
-    color: '#666',
+    color: 'rgba(255,255,255,0.72)',
     fontWeight: '700',
     marginBottom: 6,
   },
   statValue: {
     fontSize: 14,
-    color: '#1a1a1a',
+    color: '#fff',
     fontWeight: '800',
   },
   moreToggleRow: {
@@ -520,6 +571,6 @@ const styles = StyleSheet.create({
   moreToggleText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2196F3',
+    color: 'rgba(255,255,255,0.92)',
   },
 });

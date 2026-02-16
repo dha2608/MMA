@@ -1,25 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Dimensions,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
-import { ThemedView } from '@/components/themed-view';
+import { GlassCard } from '@/components/glass-card';
 import { ThemedText } from '@/components/themed-text';
+import type { WeatherData } from '@/services/weather-api';
 import { getWeatherByCity } from '@/services/weather-api';
 import { getCitySuggestions, searchCity } from '@/utils/vietnam-cities';
-import type { WeatherData } from '@/services/weather-api';
-
-const { width } = Dimensions.get('window');
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -27,6 +27,7 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const router = useRouter();
+  const cardAnim = useRef(new Animated.Value(0)).current;
 
   // Cập nhật gợi ý khi người dùng nhập
   useEffect(() => {
@@ -103,26 +104,38 @@ export default function HomeScreen() {
     }
   };
 
+  useEffect(() => {
+    if (weatherData) {
+      cardAnim.setValue(0);
+      Animated.timing(cardAnim, {
+        toValue: 1,
+        duration: 320,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [weatherData, cardAnim]);
+
   const getWeatherIconUrl = (iconCode: string) => {
     return `https://openweathermap.org/img/wn/${iconCode}@2x.png`;
   };
 
   const getGradientColors = () => {
     if (!weatherData) {
-      return ['#4A90E2', '#357ABD'];
+      // Dark default (less glare)
+      return ['#0B1020', '#111B3B', '#07111F'];
     }
     const hour = new Date().getHours();
     const isDay = hour >= 6 && hour < 20;
     const weatherMain = weatherData.weather[0].main.toLowerCase();
     
     if (weatherMain.includes('rain') || weatherMain.includes('drizzle')) {
-      return isDay ? ['#6B7A8F', '#4A5F7F'] : ['#2C3E50', '#1A252F'];
+      return isDay ? ['#0B1226', '#0E1A3A', '#0A1224'] : ['#070B16', '#0A1020', '#050814'];
     } else if (weatherMain.includes('cloud')) {
-      return isDay ? ['#87CEEB', '#6BB6FF'] : ['#4A5568', '#2D3748'];
+      return isDay ? ['#0A1430', '#0F214A', '#07112A'] : ['#070B18', '#0B1226', '#050814'];
     } else if (weatherMain.includes('clear')) {
-      return isDay ? ['#4A90E2', '#357ABD'] : ['#1A1A2E', '#16213E'];
+      return isDay ? ['#07152E', '#0B2B5A', '#050E1E'] : ['#040510', '#0A1030', '#02030A'];
     } else {
-      return isDay ? ['#FFB347', '#FF8C00'] : ['#2C1810', '#1A0F08'];
+      return isDay ? ['#0B1020', '#1B243F', '#07111F'] : ['#05060F', '#0A0E1F', '#03040A'];
     }
   };
 
@@ -135,7 +148,10 @@ export default function HomeScreen() {
         style={styles.gradient}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: Math.max(insets.top + 14, 24), paddingBottom: insets.bottom + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -147,65 +163,78 @@ export default function HomeScreen() {
           </ThemedText>
 
           <View style={styles.searchContainer}>
-            <View style={styles.searchInputContainer}>
+            <GlassCard intensity={22} tint="dark" style={styles.searchGlass}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Nhập tên thành phố..."
-                placeholderTextColor="rgba(255,255,255,0.7)"
+                placeholder="Nhập tên thành phố…"
+                placeholderTextColor="rgba(255,255,255,0.75)"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={handleSearch}
                 autoCapitalize="words"
+                returnKeyType="search"
               />
-            </View>
+            </GlassCard>
             <TouchableOpacity
               style={styles.searchButton}
               onPress={handleSearch}
               disabled={loading}
-              activeOpacity={0.8}
+              activeOpacity={0.86}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <ThemedText style={styles.searchButtonText}>Tìm kiếm</ThemedText>
-              )}
+              <GlassCard intensity={22} tint="dark" style={styles.searchButtonGlass}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.searchButtonText}>Tìm</ThemedText>
+                )}
+              </GlassCard>
             </TouchableOpacity>
           </View>
 
           {/* Gợi ý thành phố */}
           {suggestions.length > 0 && (
-            <View style={styles.suggestionsContainer}>
+            <GlassCard intensity={22} tint="dark" style={styles.suggestionsContainer}>
               {suggestions.map((suggestion, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={styles.suggestionItem}
+                  style={[styles.suggestionItem, index < suggestions.length - 1 && styles.suggestionDivider]}
                   onPress={() => handleSuggestionPress(suggestion)}
                   activeOpacity={0.7}
                 >
                   <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
                 </TouchableOpacity>
               ))}
-            </View>
+            </GlassCard>
           )}
 
           {/* Hiển thị lỗi */}
           {error && (
-            <View style={styles.errorContainer}>
+            <GlassCard intensity={18} tint="dark" style={styles.errorContainer}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
-            </View>
+            </GlassCard>
           )}
 
           {/* Hiển thị kết quả thời tiết */}
           {weatherData && (
-            <TouchableOpacity
-              style={styles.weatherCard}
-              onPress={handleWeatherCardPress}
-              activeOpacity={0.9}
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    translateY: cardAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [10, 0],
+                    }),
+                  },
+                ],
+                opacity: cardAnim,
+              }}
             >
-              <LinearGradient
-                colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.9)']}
-                style={styles.cardGradient}
+              <TouchableOpacity
+                style={styles.weatherCard}
+                onPress={handleWeatherCardPress}
+                activeOpacity={0.9}
               >
+                <GlassCard intensity={24} tint="dark" style={styles.weatherCardGlass}>
                 <View style={styles.weatherHeader}>
                   <View>
                     <ThemedText type="title" style={styles.cityName}>
@@ -281,8 +310,9 @@ export default function HomeScreen() {
                     👆 Chạm để xem chi tiết
                   </ThemedText>
                 </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                </GlassCard>
+              </TouchableOpacity>
+            </Animated.View>
           )}
         </ScrollView>
       </LinearGradient>
@@ -299,8 +329,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 60,
-    paddingBottom: 40,
   },
   title: {
     textAlign: 'center',
@@ -314,43 +342,32 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 22,
     color: 'rgba(255,255,255,0.9)',
     fontSize: 16,
   },
   searchContainer: {
-    marginBottom: 20,
+    marginBottom: 14,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
   },
-  searchInputContainer: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+  searchGlass: {
+    flex: 1,
   },
   searchInput: {
-    padding: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     fontSize: 16,
     color: '#fff',
   },
   searchButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 16,
-    padding: 18,
+    width: 76,
+  },
+  searchButtonGlass: {
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   searchButtonText: {
     color: '#fff',
@@ -358,22 +375,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   suggestionsContainer: {
-    marginBottom: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    marginBottom: 14,
   },
   suggestionItem: {
-    padding: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  suggestionDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: 'rgba(255,255,255,0.10)',
   },
   suggestionText: {
     fontSize: 16,
@@ -381,17 +391,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   errorContainer: {
-    backgroundColor: 'rgba(244, 67, 54, 0.9)',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: 'rgba(244, 67, 54, 0.22)',
+    borderColor: 'rgba(244, 67, 54, 0.35)',
   },
   errorText: {
     color: '#fff',
@@ -400,17 +404,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   weatherCard: {
-    marginTop: 20,
-    borderRadius: 24,
-    overflow: 'hidden',
+    marginTop: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 12,
   },
-  cardGradient: {
-    padding: 28,
+  weatherCardGlass: {
+    padding: 18,
   },
   weatherHeader: {
     marginBottom: 24,
@@ -418,14 +420,14 @@ const styles = StyleSheet.create({
   cityName: {
     fontSize: 32,
     marginBottom: 6,
-    color: '#1a1a1a',
+    color: '#fff',
     fontWeight: 'bold',
   },
   country: {
     fontSize: 14,
-    opacity: 0.6,
+    opacity: 0.85,
     textTransform: 'uppercase',
-    color: '#666',
+    color: 'rgba(255,255,255,0.85)',
     fontWeight: '600',
   },
   weatherMain: {
@@ -440,14 +442,14 @@ const styles = StyleSheet.create({
   temperature: {
     fontSize: 72,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: '#fff',
     marginBottom: 8,
     lineHeight: 80,
   },
   weatherDescription: {
     fontSize: 20,
     textTransform: 'capitalize',
-    color: '#666',
+    color: 'rgba(255,255,255,0.88)',
     marginBottom: 12,
     fontWeight: '500',
   },
@@ -456,7 +458,7 @@ const styles = StyleSheet.create({
   },
   tempRangeText: {
     fontSize: 14,
-    color: '#888',
+    color: 'rgba(255,255,255,0.75)',
     fontWeight: '500',
   },
   iconContainer: {
@@ -473,13 +475,13 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconFallbackText: {
     fontSize: 48,
-    color: '#2196F3',
+    color: '#fff',
     fontWeight: 'bold',
   },
   weatherDetails: {
@@ -487,7 +489,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.14)',
     marginBottom: 16,
   },
   detailCard: {
@@ -502,24 +504,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.7,
     marginBottom: 6,
-    color: '#666',
+    color: 'rgba(255,255,255,0.80)',
     fontWeight: '500',
   },
   detailValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: '#fff',
   },
   tapHintContainer: {
-    paddingTop: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: 'rgba(255,255,255,0.12)',
   },
   tapHint: {
     textAlign: 'center',
     fontSize: 13,
-    opacity: 0.6,
-    color: '#666',
+    opacity: 0.85,
+    color: 'rgba(255,255,255,0.85)',
     fontWeight: '500',
   },
 });
